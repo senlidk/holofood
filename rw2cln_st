@@ -1,0 +1,281 @@
+#!/bin/bash
+### Help information
+function usage()
+{
+	echo -e "\nPipeline for processing raw sequence data (single thread edition)."
+	echo -e " "
+	echo -e "\t--file1="
+	echo -e "\tInput sequnce, forward."
+	echo -e " "
+	echo -e "\t--file2="
+	echo -e "\tInput sequnce, reversed."
+	echo -e " "
+	echo -e "\t--mode=rmdup"
+	echo -e "\tRun duplicates removal."
+	echo -e " "
+	echo -e "\t--help OR -h"
+	echo -e "\tDisplay help information.\n"
+	echo -e "Written by Sen Li, Data manager of HoloFood, EU-H2020, University of Copenhagen.\n"
+}
+### End Help
+### Define args
+for arg in "$@"
+do
+    if [ "$arg" == "--help" ] || [ "$arg" == "-h" ]; then
+        #echo "Help argument detected."
+        usage
+        exit 0
+	fi
+done
+for arg in "$@"
+do
+	if [[ "$arg" == "--file1="* ]]; then
+		#echo "input file detected"
+		FILE1=${arg:8}
+	elif [[ "$arg" == "--file2="* ]]; then
+		#echo "input file detected"
+		FILE2=${arg:8}
+    elif [[ "$arg" == "--mode="* ]]; then
+		#echo "input file detected"
+		RMODE=${arg:7}
+	#elif [[ "$arg" == "--jvmem="* ]]; then
+	#	echo "input file detected"
+	#	JVMEM=${arg:8}
+	fi
+done
+#if [ ! "$RMODE" == "rmdup" ]; then
+#	echo "Duplicates removal will "
+#else
+#	echo "Skip duplicates removal, exit."
+#	exit 0
+#fi
+### End args
+### $FILE1: raw data file for., $FILE2: raw data file rev.
+### software list: fastqc, AdapterRemoval, seqkit, BBMap/repair.sh
+### Step 0: Demultiplexing
+### Skipped sometime
+
+
+
+
+
+ROOT_DIR=`pwd`
+### Step 1: Generate quality report. Use 'FastQC'
+mkdir -p ${ROOT_DIR}/1_quality_report
+echo "-------------------   STEP 1   -------------------"
+raw_name_1=`echo $FILE1 | rev | cut -d '/' -f 1 | rev | cut -d '.' -f 1`
+if [ ! -f ${ROOT_DIR}/1_quality_report/${raw_name_1}_short.txt ]; then
+	echo "Generating quality report of ${raw_name_1} using fastqc."
+	fastqc -f fastq -t 1 $FILE1 -o ${ROOT_DIR}/1_quality_report
+	if [ -f ${ROOT_DIR}/1_quality_report/${raw_name_1}_fastqc.zip ]; then	
+		cd ${ROOT_DIR}/1_quality_report
+		unzip -q ${raw_name_1}_fastqc.zip
+		cd ${ROOT_DIR}/1_quality_report/${raw_name_1}_fastqc
+		total_seqs=`cat fastqc_data.txt | grep 'Total Sequences' | cut -f 2`
+		gc_percent=`cat fastqc_data.txt | grep '%GC' | cut -f 2`
+		seq_length=`cat fastqc_data.txt | grep -A1 '#Length' | tail -n +2 | cut -f 1`
+		seq_qual=`cat fastqc_data.txt | awk '/>>Per base sequence quality/,/>>END_MODULE/' | tail -n +3 | head -n -1 | awk '{total+=$FILE2} END {print total/NR}'`
+		n_count=`cat fastqc_data.txt | awk '/>>Per base N content/,/>>END_MODULE/' | tail -n +3 | head -n -1 | awk '{total+=$FILE2} END {print total/NR}'`
+		#echo -e "File Name:\t${raw_name_1}\nNumber of Sequences:\t${total_seqs}\nGC%:\t${gc_percent}\nSequence Length:\t${seq_length}\nAverage per base sequence quality:\t${seq_qual}\nN%\t${n_count}" > ${ROOT_DIR}/1_quality_report/${raw_name_1}_short.txt
+		echo -e "File Name\tNumber of Sequences\tGC%\tSequence Length\tAverage per base sequence quality\tN%\n${raw_name_1}\t${total_seqs}\t${gc_percent}\t${seq_length}\t${seq_qual}\t${n_count}\n" > ${ROOT_DIR}/1_quality_report/${raw_name_1}_short.txt
+		cd ${ROOT_DIR}/1_quality_report
+		rm -rf ${raw_name_1}_fastqc
+		cd ${ROOT_DIR}
+		echo "Summary report of ${raw_name_1} has been generated in '${ROOT_DIR}/1_quality_report/${raw_name_1}_short.txt'."
+	else
+		echo "Quality report of ${raw_name_1} DOES NOT exist! Program is terminated."
+		exit 0
+	fi
+else
+	echo "Quality report of ${raw_name_1} already exists, skipping fastqc."
+fi
+raw_name_2=`echo $FILE2 | rev | cut -d '/' -f 1 | rev | cut -d '.' -f 1`
+if [ ! -f ${ROOT_DIR}/1_quality_report/${raw_name_2}_short.txt ]; then
+	echo "Generating quality report of ${raw_name_2} using fastqc."
+	fastqc -f fastq -t 1 $FILE2 -o ${ROOT_DIR}/1_quality_report
+	if [ -f ${ROOT_DIR}/1_quality_report/${raw_name_2}_fastqc.zip ]; then	
+		cd ${ROOT_DIR}/1_quality_report
+		unzip -q ${raw_name_2}_fastqc.zip
+		cd ${ROOT_DIR}/1_quality_report/${raw_name_2}_fastqc
+		total_seqs=`cat fastqc_data.txt | grep 'Total Sequences' | cut -f 2`
+		gc_percent=`cat fastqc_data.txt | grep '%GC' | cut -f 2`
+		seq_length=`cat fastqc_data.txt | grep -A1 '#Length' | tail -n +2 | cut -f 1`
+		seq_qual=`cat fastqc_data.txt | awk '/>>Per base sequence quality/,/>>END_MODULE/' | tail -n +3 | head -n -1 | awk '{total+=$FILE2} END {print total/NR}'`
+		n_count=`cat fastqc_data.txt | awk '/>>Per base N content/,/>>END_MODULE/' | tail -n +3 | head -n -1 | awk '{total+=$FILE2} END {print total/NR}'`
+		#echo -e "File Name:\t${raw_name_2}\nNumber of Sequences:\t${total_seqs}\nGC%:\t${gc_percent}\nSequence Length:\t${seq_length}\nAverage per base sequence quality:\t${seq_qual}\nN%\t${n_count}" > ${ROOT_DIR}/1_quality_report/${raw_name_2}_short.txt
+		echo -e "File Name\tNumber of Sequences\tGC%\tSequence Length\tAverage per base sequence quality\tN%\n${raw_name_2}\t${total_seqs}\t${gc_percent}\t${seq_length}\t${seq_qual}\t${n_count}\n" > ${ROOT_DIR}/1_quality_report/${raw_name_2}_short.txt
+		cd ${ROOT_DIR}/1_quality_report
+		rm -rf ${raw_name_2}_fastqc
+		cd ${ROOT_DIR}
+		echo "Summary report of ${raw_name_2} has been generated in '${ROOT_DIR}/1_quality_report/${raw_name_2}_short.txt'."
+	else
+		echo "Quality report of ${raw_name_2} DOES NOT exist! Program is terminated."
+		exit 0
+	fi
+else
+	echo "Quality report of ${raw_name_2} already exists, skipping fastqc."
+fi
+
+
+### Step 2: Quality Filtering. Use 'AdapterRemoval'
+echo "-------------------   STEP 2   -------------------"
+mkdir -p ${ROOT_DIR}/2_filtering
+base_name=`echo ${raw_name_1} | rev | cut -d '_' -f 2- | rev`
+if [ ! -f ${ROOT_DIR}/2_filtering/${base_name}.settings ]; then
+	echo "Trimming ${raw_name_1} and ${raw_name_2} using AdapterRemoval."
+	AdapterRemoval --file1 $FILE1 --file2 $FILE2 --basename ${ROOT_DIR}/2_filtering/${base_name} --qualitybase 33 --trimqualities --trimns --maxns 5 --gzip
+	mv ${ROOT_DIR}/2_filtering/${base_name}.pair1.truncated.gz ${ROOT_DIR}/2_filtering/${raw_name_1}_filtered.fastq.gz
+	mv ${ROOT_DIR}/2_filtering/${base_name}.pair2.truncated.gz ${ROOT_DIR}/2_filtering/${raw_name_2}_filtered.fastq.gz
+	if [ -f ${ROOT_DIR}/2_filtering/${base_name}.settings ]; then
+		echo "Trimmed pair-ends sequences are generated in '${ROOT_DIR}/2_filtering/${raw_name_1}_filtered.fastq.gz' and '${ROOT_DIR}/2_filtering/${raw_name_2}_filtered.fastq.gz'."
+	else
+		echo "Something went wrong while trimming. Program is terminated."
+		exit 0
+	fi
+	
+else
+	echo "${raw_name_1} and ${raw_name_2} are already trimmed, skipping AdapterRemoval."
+fi
+
+
+### Step 3: Generate quality report after filtering. Use 'FastQC'
+echo "-------------------   STEP 3   -------------------"
+mkdir -p ${ROOT_DIR}/3_quality_report_filtered
+if [ ! -f ${ROOT_DIR}/3_quality_report_filtered/${raw_name_1}_filtered_short.txt ]; then
+	echo "Generating quality report of ${raw_name_1}_filtered using fastqc."
+	fastqc -f fastq -t 1 ${ROOT_DIR}/2_filtering/${raw_name_1}_filtered.fastq.gz -o ${ROOT_DIR}/3_quality_report_filtered
+	if [ -f ${ROOT_DIR}/3_quality_report_filtered/${raw_name_1}_filtered_fastqc.zip ]; then	
+		cd ${ROOT_DIR}/3_quality_report_filtered
+		unzip -q ${raw_name_1}_filtered_fastqc.zip
+		cd ${ROOT_DIR}/3_quality_report_filtered/${raw_name_1}_filtered_fastqc
+		total_seqs=`cat fastqc_data.txt | grep 'Total Sequences' | cut -f 2`
+		gc_percent=`cat fastqc_data.txt | grep '%GC' | cut -f 2`
+		seq_length=`cat fastqc_data.txt | grep -A1 '#Length' | tail -n +2 | cut -f 1`
+		seq_qual=`cat fastqc_data.txt | awk '/>>Per base sequence quality/,/>>END_MODULE/' | tail -n +3 | head -n -1 | awk '{total+=$FILE2} END {print total/NR}'`
+		n_count=`cat fastqc_data.txt | awk '/>>Per base N content/,/>>END_MODULE/' | tail -n +3 | head -n -1 | awk '{total+=$FILE2} END {print total/NR}'`
+		#echo -e "File Name:\t${raw_name_1}\nNumber of Sequences:\t${total_seqs}\nGC%:\t${gc_percent}\nSequence Length:\t${seq_length}\nAverage per base sequence quality:\t${seq_qual}\nN%\t${n_count}" > ${ROOT_DIR}/1_quality_report/${raw_name_1}_short.txt
+		echo -e "File Name\tNumber of Sequences\tGC%\tSequence Length\tAverage per base sequence quality\tN%\n${raw_name_1}_filtered\t${total_seqs}\t${gc_percent}\t${seq_length}\t${seq_qual}\t${n_count}\n" > ${ROOT_DIR}/3_quality_report_filtered/${raw_name_1}_filtered_short.txt
+		cd ${ROOT_DIR}/3_quality_report_filtered
+		rm -rf ${raw_name_1}_filtered_fastqc
+		cd ${ROOT_DIR}
+		echo "Summary report of ${raw_name_1}_filtered has been generated in '${ROOT_DIR}/3_quality_report_filtered/${raw_name_1}_filtered_short.txt'."
+	else
+		echo "Quality report of ${raw_name_1}_filtered DOES NOT exist! Program is terminated."
+		exit 0
+	fi
+else
+	echo "Quality report of ${raw_name_1}_filtered already exists, skipping fastqc."
+fi
+if [ ! -f ${ROOT_DIR}/3_quality_report_filtered/${raw_name_2}_filtered_short.txt ]; then
+	echo "Generating quality report of ${raw_name_2}_filtered using fastqc."
+	fastqc -f fastq -t 1 ${ROOT_DIR}/2_filtering/${raw_name_2}_filtered.fastq.gz -o ${ROOT_DIR}/3_quality_report_filtered
+	if [ -f ${ROOT_DIR}/3_quality_report_filtered/${raw_name_2}_filtered_fastqc.zip ]; then	
+		cd ${ROOT_DIR}/3_quality_report_filtered
+		unzip -q ${raw_name_2}_filtered_fastqc.zip
+		cd ${ROOT_DIR}/3_quality_report_filtered/${raw_name_2}_filtered_fastqc
+		total_seqs=`cat fastqc_data.txt | grep 'Total Sequences' | cut -f 2`
+		gc_percent=`cat fastqc_data.txt | grep '%GC' | cut -f 2`
+		seq_length=`cat fastqc_data.txt | grep -A1 '#Length' | tail -n +2 | cut -f 1`
+		seq_qual=`cat fastqc_data.txt | awk '/>>Per base sequence quality/,/>>END_MODULE/' | tail -n +3 | head -n -1 | awk '{total+=$FILE2} END {print total/NR}'`
+		n_count=`cat fastqc_data.txt | awk '/>>Per base N content/,/>>END_MODULE/' | tail -n +3 | head -n -1 | awk '{total+=$FILE2} END {print total/NR}'`
+		#echo -e "File Name:\t${raw_name_1}\nNumber of Sequences:\t${total_seqs}\nGC%:\t${gc_percent}\nSequence Length:\t${seq_length}\nAverage per base sequence quality:\t${seq_qual}\nN%\t${n_count}" > ${ROOT_DIR}/1_quality_report/${raw_name_1}_short.txt
+		echo -e "File Name\tNumber of Sequences\tGC%\tSequence Length\tAverage per base sequence quality\tN%\n${raw_name_2}_filtered\t${total_seqs}\t${gc_percent}\t${seq_length}\t${seq_qual}\t${n_count}\n" > ${ROOT_DIR}/3_quality_report_filtered/${raw_name_2}_filtered_short.txt
+		cd ${ROOT_DIR}/3_quality_report_filtered
+		rm -rf ${raw_name_2}_filtered_fastqc
+		cd ${ROOT_DIR}
+		echo "Summary report of ${raw_name_2}_filtered has been generated in '${ROOT_DIR}/3_quality_report_filtered/${raw_name_2}_filtered_short.txt'."
+	else
+		echo "Quality report of ${raw_name_2}_filtered DOES NOT exist! Program is terminated."
+		exit 0
+	fi
+else
+	echo "Quality report of ${raw_name_2}_filtered already exists, skipping fastqc."
+fi
+if [ "$RMODE" == "rmdup" ]; then
+	echo "Run duplicates removal."
+else
+	echo "Skipping duplicates removal, exit."
+	exit 0
+fi
+### Step 4b: Duplicates removal. seqkit
+echo "-------------------   STEP 4   -------------------"
+mkdir -p ${ROOT_DIR}/4_remove_duplicates
+if [ ! -f ${ROOT_DIR}/4_remove_duplicates/${raw_name_1}_filtered_rmdup.fastq.gz ]; then
+	echo "Remove duplicates for ${raw_name_1}_filtered using seqkit."
+	zcat ${ROOT_DIR}/2_filtering/${raw_name_1}_filtered.fastq.gz | seqkit rmdup -s -d ${ROOT_DIR}/4_remove_duplicates/${raw_name_1}_filtered_dups.fastq.gz -D ${ROOT_DIR}/4_remove_duplicates/${raw_name_1}_filtered_duplist.txt -o ${ROOT_DIR}/4_remove_duplicates/${raw_name_1}_filtered_rmdup.fastq.gz 2>> ${ROOT_DIR}/4_remove_duplicates/run_${raw_name_1}.log
+else
+	echo "Duplicates have been already removed for ${raw_name_1}_filtered, skipping seqkit."
+fi
+if [ ! -f ${ROOT_DIR}/4_remove_duplicates/${raw_name_2}_filtered_rmdup.fastq.gz ]; then
+	echo "Remove duplicates for ${raw_name_2}_filtered using seqkit."
+	zcat ${ROOT_DIR}/2_filtering/${raw_name_2}_filtered.fastq.gz | seqkit rmdup -s -d ${ROOT_DIR}/4_remove_duplicates/${raw_name_2}_filtered_dups.fastq.gz -D ${ROOT_DIR}/4_remove_duplicates/${raw_name_2}_filtered_duplist.txt -o ${ROOT_DIR}/4_remove_duplicates/${raw_name_2}_filtered_rmdup.fastq.gz 2>> ${ROOT_DIR}/4_remove_duplicates/run_${raw_name_2}.log
+else
+	echo "Duplicates have been already removed for ${raw_name_2}_filtered, skipping seqkit."
+fi
+
+
+## Step 5: BBMap repair.sh
+echo "-------------------   STEP 5   -------------------"
+mkdir -p ${ROOT_DIR}/5_repair_reads
+if [ ! -f ${ROOT_DIR}/5_repair_reads/${raw_name_1}_filtered_rmdup_rpr.fastq.gz ]; then
+	echo "Repair ${raw_name_1}_filtered_rmdup and ${raw_name_2}_filtered_rmdup using BBMap/repair.sh."
+	repair.sh -Xmx4096m in1=${ROOT_DIR}/4_remove_duplicates/${raw_name_1}_filtered_rmdup.fastq.gz in2=${ROOT_DIR}/4_remove_duplicates/${raw_name_2}_filtered_rmdup.fastq.gz out1=${ROOT_DIR}/5_repair_reads/${raw_name_1}_filtered_rmdup_rpr.fastq.gz out2=${ROOT_DIR}/5_repair_reads/${raw_name_2}_filtered_rmdup_rpr.fastq.gz outs=${ROOT_DIR}/5_repair_reads/${base_name}_filtered_rmdup_singletons.fastq.gz
+else
+	echo "${raw_name_1}_filtered_rmdup and ${raw_name_2}_filtered_rmdup are already repaired, skipping BBMap/repair.sh."
+fi
+
+
+### Step 6: Generate quality report. Use 'FastQC'
+echo "-------------------   STEP 6   -------------------"
+mkdir -p ${ROOT_DIR}/6_quality_report_rmdup
+if [ ! -f ${ROOT_DIR}/6_quality_report_rmdup/${raw_name_1}_filtered_rmdup_rpr_short.txt ]; then
+	echo "Generating quality report of ${raw_name_1}_filtered_rmdup_rpr using fastqc."
+	fastqc -f fastq -t 1 ${ROOT_DIR}/5_repair_reads/${raw_name_1}_filtered_rmdup_rpr.fastq.gz -o ${ROOT_DIR}/6_quality_report_rmdup
+	if [ -f ${ROOT_DIR}/6_quality_report_rmdup/${raw_name_1}_filtered_rmdup_rpr_fastqc.zip ]; then	
+		cd ${ROOT_DIR}/6_quality_report_rmdup
+		unzip -q ${raw_name_1}_filtered_rmdup_rpr_fastqc.zip
+		cd ${ROOT_DIR}/6_quality_report_rmdup/${raw_name_1}_filtered_rmdup_rpr_fastqc
+		total_seqs=`cat fastqc_data.txt | grep 'Total Sequences' | cut -f 2`
+		gc_percent=`cat fastqc_data.txt | grep '%GC' | cut -f 2`
+		seq_length=`cat fastqc_data.txt | grep -A1 '#Length' | tail -n +2 | cut -f 1`
+		seq_qual=`cat fastqc_data.txt | awk '/>>Per base sequence quality/,/>>END_MODULE/' | tail -n +3 | head -n -1 | awk '{total+=$FILE2} END {print total/NR}'`
+		n_count=`cat fastqc_data.txt | awk '/>>Per base N content/,/>>END_MODULE/' | tail -n +3 | head -n -1 | awk '{total+=$FILE2} END {print total/NR}'`
+		#echo -e "File Name:\t${raw_name_1}\nNumber of Sequences:\t${total_seqs}\nGC%:\t${gc_percent}\nSequence Length:\t${seq_length}\nAverage per base sequence quality:\t${seq_qual}\nN%\t${n_count}" > ${ROOT_DIR}/1_quality_report/${raw_name_1}_short.txt
+		echo -e "File Name\tNumber of Sequences\tGC%\tSequence Length\tAverage per base sequence quality\tN%\n${raw_name_1}_filtered_rmdup_rpr\t${total_seqs}\t${gc_percent}\t${seq_length}\t${seq_qual}\t${n_count}\n" > ${ROOT_DIR}/6_quality_report_rmdup/${raw_name_1}_filtered_rmdup_rpr_short.txt
+		cd ${ROOT_DIR}/6_quality_report_rmdup
+		rm -rf ${raw_name_1}_filtered_rmdup_rpr_fastqc
+		cd ${ROOT_DIR}
+		echo "Summary report of ${raw_name_1}_filtered_rmdup_rpr has been generated in '${ROOT_DIR}/6_quality_report_rmdup/${raw_name_1}_filtered_rmdup_rpr_short.txt'."
+	else
+		echo "Quality report of ${raw_name_1}_filtered_rmdup_rpr DOES NOT exist! Program is terminated."
+		exit 0
+	fi
+else
+	echo "Quality report of ${raw_name_1}_filtered_rmdup_rpr already exists, skipping fastqc."
+fi
+if [ ! -f ${ROOT_DIR}/6_quality_report_rmdup/${raw_name_2}_filtered_rmdup_rpr_short.txt ]; then
+	echo "Generating quality report of ${raw_name_2}_filtered_rmdup_rpr using fastqc."
+	fastqc -f fastq -t 1 ${ROOT_DIR}/5_repair_reads/${raw_name_2}_filtered_rmdup_rpr.fastq.gz -o ${ROOT_DIR}/6_quality_report_rmdup
+	if [ -f ${ROOT_DIR}/6_quality_report_rmdup/${raw_name_2}_filtered_rmdup_rpr_fastqc.zip ]; then	
+		cd ${ROOT_DIR}/6_quality_report_rmdup
+		unzip -q ${raw_name_2}_filtered_rmdup_rpr_fastqc.zip
+		cd ${ROOT_DIR}/6_quality_report_rmdup/${raw_name_2}_filtered_rmdup_rpr_fastqc
+		total_seqs=`cat fastqc_data.txt | grep 'Total Sequences' | cut -f 2`
+		gc_percent=`cat fastqc_data.txt | grep '%GC' | cut -f 2`
+		seq_length=`cat fastqc_data.txt | grep -A1 '#Length' | tail -n +2 | cut -f 1`
+		seq_qual=`cat fastqc_data.txt | awk '/>>Per base sequence quality/,/>>END_MODULE/' | tail -n +3 | head -n -1 | awk '{total+=$FILE2} END {print total/NR}'`
+		n_count=`cat fastqc_data.txt | awk '/>>Per base N content/,/>>END_MODULE/' | tail -n +3 | head -n -1 | awk '{total+=$FILE2} END {print total/NR}'`
+		#echo -e "File Name:\t${raw_name_1}\nNumber of Sequences:\t${total_seqs}\nGC%:\t${gc_percent}\nSequence Length:\t${seq_length}\nAverage per base sequence quality:\t${seq_qual}\nN%\t${n_count}" > ${ROOT_DIR}/1_quality_report/${raw_name_1}_short.txt
+		echo -e "File Name\tNumber of Sequences\tGC%\tSequence Length\tAverage per base sequence quality\tN%\n${raw_name_2}_filtered_rmdup_rpr\t${total_seqs}\t${gc_percent}\t${seq_length}\t${seq_qual}\t${n_count}\n" > ${ROOT_DIR}/6_quality_report_rmdup/${raw_name_2}_filtered_rmdup_rpr_short.txt
+		cd ${ROOT_DIR}/6_quality_report_rmdup
+		rm -rf ${raw_name_2}_filtered_rmdup_rpr_fastqc
+		cd ${ROOT_DIR}
+		echo "Summary report of ${raw_name_2}_filtered_rmdup_rpr has been generated in '${ROOT_DIR}/6_quality_report_rmdup/${raw_name_2}_filtered_rmdup_rpr_short.txt'."
+	else
+		echo "Quality report of ${raw_name_2}_filtered_rmdup_rpr DOES NOT exist! Program is terminated."
+		exit 0
+	fi
+else
+	echo "Quality report of ${raw_name_2}_filtered_rmdup_rpr already exists, skipping fastqc."
+fi
+
